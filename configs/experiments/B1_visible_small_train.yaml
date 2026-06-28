@@ -1,0 +1,23 @@
+experiment_id: B1_visible_small_train
+modality: visible
+model: yolov8s.pt
+epochs: 10
+batch: 8
+imgsz: 640
+device: "0"
+workers: 4
+amp: true
+seed: 42
+deterministic: true
+link_mode: symlink
+predict_after_train: true
+patience: 10
+close_mosaic: 0
+class_names:
+  - People
+  - Car
+  - Bus
+  - Motorcycle
+  - Lamp
+  - Truck
+

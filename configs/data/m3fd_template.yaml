@@ -1,0 +1,16 @@
+# Directory hints are relative to DATA_ROOT and may be overridden on the CLI.
+visible_dir: visible
+infrared_dir: infrared
+label_dir: labels
+
+class_names:
+  - People
+  - Car
+  - Bus
+  - Motorcycle
+  - Lamp
+  - Truck
+
+split_policy: fixed/unified split
+is_official_split: false
+
