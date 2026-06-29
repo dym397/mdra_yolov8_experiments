@@ -94,7 +94,7 @@ AutoDL 和主流 GPU 云镜像通常提供 Ubuntu/Linux 环境，但首次创建
 ```bash
 export PROJECT_ROOT=/path/to/mdra_yolov8_experiments
 export DATA_ROOT=/path/to/datasets/M3FD
-export OUTPUT_ROOT=/path/to/outputs/mdra_yolov8
+export OUTPUT_ROOT="$PROJECT_ROOT/outputs"
 export CUDA_VISIBLE_DEVICES=0
 ```
 
@@ -122,12 +122,12 @@ mdra_yolov8_experiments/
 
 | ID       | 任务                        | 状态   | 完成标准                       | 结果/备注 |
 | -------- | --------------------------- | ------ | ------------------------------ | --------- |
-| P0-ENV   | Linux/CUDA/PyTorch 环境检查 | 可运行 | 保存环境报告，GPU 可见 | 脚本与 CLI 已验证；待 Linux GPU 实机运行 |
-| P0-DATA  | VIS/IR/label 一一对应检查 | 可运行 | 无未解释的缺失配对 | 合成配对数据集集成测试通过；待真实 M3FD |
-| P0-FIXED-SPLIT | 建立 fixed train/val/test 列表 | 可运行 | 保存 fixed split 文件、随机种子和样本清单 | 比例、复现性和防覆盖测试通过 |
-| P0-STATS | 类别、bbox 面积、场景统计 | 可运行 | 输出统计表和分布图 | 合成数据 CSV/JSON/PNG 集成测试通过 |
-| P0-TINY-SMOKE | tiny subset smoke test | 可运行 | 少量配对样本、1–2 epoch；验证 forward/backward、loss、配对、保存和单批预测 | 子集与 YOLO 数据视图测试通过；待 GPU 训练 |
-| P0-SMALL-TRAIN | small train smoke test | 可运行 | 固定小训练子集、5–10 epoch；验证 train/validation、checkpoint、resume 和指标链路 | 配置与训练封装完成；待 GPU 训练和 resume 实测 |
+| P0-ENV   | Linux/CUDA/PyTorch 环境检查 | 已完成 | 保存环境报告，GPU 可见 | RTX 3090；PyTorch 2.0.0+cu118；Ultralytics 8.3.27；报告：`outputs/env_reports/env_report_20260629_105222.*` |
+| P0-DATA  | VIS/IR/label 一一对应检查 | 已完成 | 无未解释的缺失配对 | VIS/IR/label 各 4200，34,407 个目标，0 个无效样本；报告：`outputs/data_checks/` |
+| P0-FIXED-SPLIT | 建立 fixed train/val/test 列表 | 已完成 | 保存 fixed split 文件、随机种子和样本清单 | seed 42，7:2:1，2940/840/420；`configs/splits/m3fd_seed42/` |
+| P0-STATS | 类别、bbox 面积、场景统计 | 已完成 | 输出统计表和分布图 | 34,407 个目标；CSV/JSON/PNG：`outputs/dataset_stats/`；未提供场景元数据，统一记为 unknown |
+| P0-TINY-SMOKE | tiny subset smoke test | 已完成 | 少量配对样本、1–2 epoch；验证 forward/backward、loss、配对、保存和单批预测 | 32/16、2 epoch；validation/checkpoint/results.csv/predict 均通过；`outputs/experiments/B1_visible_tiny_smoke_20260629_115152/` |
+| P0-SMALL-TRAIN | small train smoke test | 已完成 | 固定小训练子集、5–10 epoch；验证 train/validation、checkpoint、resume 和指标链路 | 300/100；epoch 2 受控中断并 resume 至 epoch 10；独立验证 mAP50=0.523、mAP50:95=0.335；`outputs/experiments/B1_visible_small_train_resume_smoke_20260629_115651/` |
 
 Split 命名规则：本项目统一使用 `fixed split` 或 `unified split`。除非能够核验数据集维护者发布的正式索引文件，否则文档、代码和论文中不得称为 `official split`。
 
@@ -274,20 +274,22 @@ conclusion
 | 2026-06-28 | 建立 Linux 兼容实验项目目录与`Project.MD` | 已完成 |
 | 2026-06-28 | 完成 6.1 代码骨架、README、配置与基础测试 | 已完成 |
 | 2026-06-28 | 12 项单元/合成数据集成测试 | 已完成 |
-| —         | Linux GPU 环境报告与真实 M3FD 配对核验 | 下一步 |
-| —         | tiny-subset GPU smoke test | 未开始 |
-| —         | small-train GPU smoke test 与 resume | 未开始 |
-| —         | YOLOv8s-Visible 正式基线 | 未开始 |
+| 2026-06-28 | Linux GPU 环境报告、CUDA 运算和 YOLOv8s 构建核验 | 已完成 |
+| 2026-06-28 | 远端 12 项测试通过；修复 Python 3.8 的 `--amp/--no-amp` 兼容性 | 已完成 |
+| 2026-06-28 | 项目、数据集目录和项目内输出迁移到持久化数据盘 `/root/autodl-tmp` | 已完成 |
+| 2026-06-29 | 完整 M3FD 配对检查：4200 对、34,407 个目标、0 个无效样本 | 已完成 |
+| 2026-06-29 | 建立 seed 42 fixed/unified split：2940/840/420，并完成真实数据统计 | 已完成 |
+| 2026-06-29 | tiny-subset GPU smoke：2 epoch、validation、checkpoint 和 predict | 已完成 |
+| 2026-06-29 | small-train GPU smoke：epoch 2 中断后 resume 至 epoch 10，并独立验证和预测 | 已完成 |
+| —         | YOLOv8s-Visible 正式基线 | 下一步 |
 
 ## 10. 下一步
 
-下一步将项目上传到 Linux GPU 服务器，严格按照 `README.md` 顺序执行：
+6.1 已在真实 M3FD/Linux GPU 上全部通过，本阶段到此停止。下一步进入 B1 YOLOv8s-Visible 正式基线；仍不提前实现 LCMF、P2 或 DRA。
 
-1. 运行 P0-ENV 并保存真实 CUDA/GPU 环境报告；
-2. 用户确认 M3FD 的 visible、infrared、labels 实际目录名；
-3. 运行 P0-DATA，修复所有未解释的无效样本；
-4. 生成 fixed/unified split 并完成真实数据统计；
-5. 依次运行 tiny-subset 和 small-train 两级 GPU smoke test；
-6. 验证 checkpoint、results.csv、validation、单批预测和 resume。
+正式基线前保持以下内容冻结：
 
-6.1 在真实 M3FD/Linux GPU 上全部通过后停止本阶段。之后才进入 B1 正式基线；本阶段不实现 LCMF、P2 或 DRA。
+1. 使用 `configs/splits/m3fd_seed42/`，不得重新随机划分；
+2. 数据根目录为 `/root/autodl-tmp/M3FD_Detection`，模态目录名为 `Vis` 和 `Ir`；
+3. 输出继续写入项目内 `outputs/`；
+4. 使用持久化权重 `weights/yolov8s.pt`，避免运行时外网下载。

@@ -31,9 +31,9 @@ python -m pytest -q
 Paths are runtime inputs; the code does not depend on `/root/autodl-tmp` or any Windows drive.
 
 ```bash
-export PROJECT_ROOT=/path/to/mdra_yolov8_experiments
-export DATA_ROOT=/path/to/datasets/M3FD
-export OUTPUT_ROOT=/path/to/outputs/mdra_yolov8
+export PROJECT_ROOT=/root/autodl-tmp/mdra_yolov8_experiments
+export DATA_ROOT=/root/autodl-tmp/M3FD_Detection
+export OUTPUT_ROOT="$PROJECT_ROOT/outputs"
 export CUDA_VISIBLE_DEVICES=0
 
 cd "$PROJECT_ROOT"
@@ -46,19 +46,19 @@ All commands below assume they are executed from `$PROJECT_ROOT`.
 The scripts pair files by the path relative to each modality directory, without the extension. For example, these files share sample ID `scene_a/000001`:
 
 ```text
-$DATA_ROOT/visible/scene_a/000001.jpg
-$DATA_ROOT/infrared/scene_a/000001.png
+$DATA_ROOT/Vis/scene_a/000001.jpg
+$DATA_ROOT/Ir/scene_a/000001.png
 $DATA_ROOT/labels/scene_a/000001.txt
 ```
 
 A flat layout also works:
 
 ```text
-M3FD/
-├── visible/
+M3FD_Detection/
+├── Vis/
 │   ├── 000001.jpg
 │   └── 000002.jpg
-├── infrared/
+├── Ir/
 │   ├── 000001.png
 │   └── 000002.png
 └── labels/
@@ -97,8 +97,8 @@ $OUTPUT_ROOT/env_reports/env_report_YYYYMMDD_HHMMSS.json
 ```bash
 python scripts/check_m3fd_pairs.py \
   --data-root "$DATA_ROOT" \
-  --vis-dir visible \
-  --ir-dir infrared \
+  --vis-dir Vis \
+  --ir-dir Ir \
   --label-dir labels \
   --output-root "$OUTPUT_ROOT" \
   --fail-on-error
@@ -115,8 +115,8 @@ This creates a reproducible **fixed/unified split**, not an official split:
 ```bash
 python scripts/make_fixed_split.py \
   --data-root "$DATA_ROOT" \
-  --vis-dir visible \
-  --ir-dir infrared \
+  --vis-dir Vis \
+  --ir-dir Ir \
   --label-dir labels \
   --output-dir configs/splits/m3fd_seed42 \
   --train-ratio 0.7 \
@@ -133,7 +133,7 @@ The command refuses to split invalid data by default and refuses to overwrite an
 python scripts/dataset_stats.py \
   --data-root "$DATA_ROOT" \
   --split-dir configs/splits/m3fd_seed42 \
-  --vis-dir visible \
+  --vis-dir Vis \
   --label-dir labels \
   --output-root "$OUTPUT_ROOT"
 ```
@@ -146,6 +146,7 @@ Scene content is never guessed from pixels. Without an explicit metadata CSV con
 python scripts/dataset_stats.py \
   --data-root "$DATA_ROOT" \
   --split-dir configs/splits/m3fd_seed42 \
+  --vis-dir Vis \
   --label-dir labels \
   --scene-metadata /path/to/verified_scene_metadata.csv \
   --output-root "$OUTPUT_ROOT"
@@ -170,10 +171,11 @@ Run 1–2 epochs. The command-line values override YAML values:
 python scripts/train_visible.py \
   --config configs/experiments/B1_visible_tiny_smoke.yaml \
   --data-root "$DATA_ROOT" \
-  --vis-dir visible \
+  --vis-dir Vis \
   --label-dir labels \
   --split-dir configs/splits/m3fd_tiny_seed42 \
   --output-root "$OUTPUT_ROOT" \
+  --model "$PROJECT_ROOT/weights/yolov8s.pt" \
   --epochs 2 \
   --batch 4 \
   --imgsz 640 \
@@ -195,10 +197,11 @@ python scripts/create_tiny_subset.py \
 python scripts/train_visible.py \
   --config configs/experiments/B1_visible_small_train.yaml \
   --data-root "$DATA_ROOT" \
-  --vis-dir visible \
+  --vis-dir Vis \
   --label-dir labels \
   --split-dir configs/splits/m3fd_small_seed42 \
   --output-root "$OUTPUT_ROOT" \
+  --model "$PROJECT_ROOT/weights/yolov8s.pt" \
   --epochs 10 \
   --batch 8 \
   --imgsz 640 \
@@ -275,4 +278,3 @@ Not implemented in this phase:
 - ECA;
 - SOTA comparisons;
 - second datasets.
-

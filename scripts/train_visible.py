@@ -32,7 +32,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--imgsz", type=int, default=None)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--workers", type=int, default=None)
-    parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=None)
+    amp_group = parser.add_mutually_exclusive_group()
+    amp_group.add_argument("--amp", dest="amp", action="store_true", help="Enable AMP.")
+    amp_group.add_argument("--no-amp", dest="amp", action="store_false", help="Disable AMP.")
+    parser.set_defaults(amp=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--link-mode", choices=("symlink", "hardlink", "copy"), default=None)
     parser.add_argument("--resume", type=Path, default=None, metavar="LAST_PT", help="Resume the original Ultralytics run from last.pt.")
@@ -226,4 +229,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -1,6 +1,6 @@
 experiment_id: B1_visible_tiny_smoke
 modality: visible
-model: yolov8s.pt
+model: weights/yolov8s.pt
 epochs: 2
 batch: 4
 imgsz: 640
@@ -20,4 +20,3 @@ class_names:
   - Motorcycle
   - Lamp
   - Truck
-
