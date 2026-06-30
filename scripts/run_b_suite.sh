@@ -144,23 +144,28 @@ for id in "${CONFIGS[@]}"; do
   }
   printf '%s\n' "$run_dir" > "$CONTROLLER_DIR/${id}_run_dir.txt"
 
+  checkpoint="$run_dir/weights/best.pt"
+  if [[ -f "$run_dir/weights/best_inference.pt" ]]; then
+    checkpoint="$run_dir/weights/best_inference.pt"
+  fi
+
   run_step "${id}_test" \
     "$PYTHON_BIN" scripts/validate_b_baseline.py \
-    --checkpoint "$run_dir/weights/best.pt" --split test \
+    --checkpoint "$checkpoint" --split test \
     --output-root "$OUTPUT_ROOT" --device "$DEVICE" --workers 4
 
   run_step "${id}_predict" \
     "$PYTHON_BIN" scripts/predict_b_baseline.py \
-    --checkpoint "$run_dir/weights/best.pt" --data-root "$DATA_ROOT" --split-dir "$SPLIT_DIR" \
+    --checkpoint "$checkpoint" --data-root "$DATA_ROOT" --split-dir "$SPLIT_DIR" \
     --split test --max-images 20 --output-root "$OUTPUT_ROOT" --device "$DEVICE"
 
   run_step "${id}_profile" \
     "$PYTHON_BIN" scripts/profile_b_baseline.py \
-    --config "configs/experiments/${id}.yaml" --output-root "$OUTPUT_ROOT" \
+    --checkpoint "$checkpoint" --output-root "$OUTPUT_ROOT" \
     --imgsz 640 --device "$DEVICE" --batch 1 --warmup 20 --iterations 100
 
   write_status "model_completed" "$id" "run_dir=$run_dir"
 done
 
 CURRENT_STEP="completed"
-write_status "completed" "completed" "all B1-B5 experiments and post-processing passed"
+write_status "completed" "completed" "all selected experiments and post-processing passed"

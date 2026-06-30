@@ -32,6 +32,11 @@ DEFAULTS: dict[str, Any] = {
     "nc": 6,
     "class_names": DEFAULT_CLASS_NAMES,
     "pretrained": "weights/yolov8s.pt",
+    "dra_lambda": 0.1,
+    "dra_hidden_channels": 32,
+    "dra_bbox_expansion": 1.2,
+    "dra_edge_fusion": "max",
+    "dra_edge_alpha": 0.5,
 }
 
 
@@ -50,12 +55,21 @@ def load_b_experiment_config(path: str | Path) -> dict[str, Any]:
         config[key] = int(config[key])
     for key in ("lr0", "lrf", "weight_decay", "warmup_epochs", "hflip_prob", "conf_thres", "iou_thres"):
         config[key] = float(config[key])
+    for key in ("dra_lambda", "dra_bbox_expansion", "dra_edge_alpha"):
+        config[key] = float(config[key])
+    config["dra_hidden_channels"] = int(config["dra_hidden_channels"])
     if config["epochs"] <= 0 or config["batch"] <= 0 or config["effective_batch"] <= 0:
         raise ValueError("epochs, batch, and effective_batch must be positive")
     if config["imgsz"] <= 0 or config["imgsz"] % 32 != 0:
         raise ValueError("imgsz must be a positive multiple of 32")
     if config["optimizer"].lower() not in {"adamw", "sgd"}:
         raise ValueError("optimizer must be AdamW or SGD")
+    if config["dra_lambda"] < 0 or config["dra_bbox_expansion"] < 1.0:
+        raise ValueError("dra_lambda must be non-negative and dra_bbox_expansion must be at least 1.0")
+    if config["dra_edge_fusion"] not in {"max", "weighted"}:
+        raise ValueError("dra_edge_fusion must be max or weighted")
+    if not 0.0 <= config["dra_edge_alpha"] <= 1.0:
+        raise ValueError("dra_edge_alpha must be within [0, 1]")
     return config
 
 

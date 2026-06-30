@@ -21,6 +21,7 @@ from tqdm import tqdm
 from ultralytics.utils.loss import v8DetectionLoss
 
 from mdra.data.paired_dataset import PairedM3FDDataset, paired_collate_fn
+from mdra.data.edge_targets import build_dra_supervision, masked_l1_loss
 from mdra.engine.metrics import evaluate_detector
 from mdra.models.baselines import build_b_model, load_b_checkpoint_model
 from mdra.utils.env_utils import collect_env_info, format_env_report
@@ -33,6 +34,7 @@ RESULT_COLUMNS = [
     "train_box_loss",
     "train_cls_loss",
     "train_dfl_loss",
+    "train_dra_loss",
     "precision",
     "recall",
     "mAP50",
@@ -84,7 +86,7 @@ def build_b_dataloaders(
     split_dir = Path(config["split_dir"])
     common = {
         "data_root": config["data_root"],
-        "input_mode": config["variant"],
+        "input_mode": str(config.get("input_mode", config["variant"])),
         "imgsz": int(config["imgsz"]),
         "vis_dir": config.get("vis_dir"),
         "ir_dir": config.get("ir_dir"),
@@ -146,7 +148,7 @@ def build_b_eval_dataloader(
     dataset = PairedM3FDDataset(
         data_root=config["data_root"],
         split_file=split_file,
-        input_mode=config["variant"],
+        input_mode=str(config.get("input_mode", config["variant"])),
         imgsz=int(config["imgsz"]),
         vis_dir=config.get("vis_dir"),
         ir_dir=config.get("ir_dir"),
@@ -325,11 +327,48 @@ class BExperimentTrainer:
             "scaler_state": self.scaler.state_dict(),
         }
 
+    def _inference_checkpoint(self, epoch: int) -> dict[str, Any]:
+        """Create a detector-only checkpoint with DRA parameters and configuration removed."""
+        inference_config = dict(self.config)
+        inference_config["source_training_variant"] = self.config["variant"]
+        inference_config["variant"] = "early_fusion_p2"
+        inference_config["input_mode"] = "early_fusion_p2"
+        inference_model, _ = build_b_model(
+            "early_fusion_p2",
+            nc=int(inference_config["nc"]),
+            class_names=list(inference_config["class_names"]),
+            pretrained=None,
+            loss_gains=inference_config,
+        )
+        source_state = self.model.state_dict()
+        inference_state = inference_model.state_dict()
+        shared = {
+            key: value.detach().cpu()
+            for key, value in source_state.items()
+            if key in inference_state and value.shape == inference_state[key].shape
+        }
+        missing = sorted(set(inference_state) - set(shared))
+        if missing:
+            raise RuntimeError(f"cannot strip DRA checkpoint; missing detector tensors: {missing[:10]}")
+        inference_model.load_state_dict(shared, strict=True)
+        return {
+            "format": "mdra_detector_inference_v1",
+            "epoch": epoch,
+            "best_fitness": self.best_fitness,
+            "run_dir": str(self.run_dir),
+            "config": inference_config,
+            "source_training_variant": self.config["variant"],
+            "dra_head_removed": True,
+            "model_state": inference_model.state_dict(),
+        }
+
     def _save_checkpoint(self, epoch: int, improved: bool) -> None:
         checkpoint = self._checkpoint(epoch)
         torch.save(checkpoint, self.weights_dir / "last.pt")
         if improved:
             torch.save(checkpoint, self.weights_dir / "best.pt")
+            if getattr(self.model, "dra_head", None) is not None:
+                torch.save(self._inference_checkpoint(epoch), self.weights_dir / "best_inference.pt")
 
     def _apply_warmup(self, epoch: int, step: int) -> None:
         """Linearly warm the base learning rate during the configured opening epochs."""
@@ -348,7 +387,7 @@ class BExperimentTrainer:
         self.model.train()
         if self.device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(self.device)
-        sums = torch.zeros(3, dtype=torch.float64)
+        sums = torch.zeros(4, dtype=torch.float64)
         batches = 0
         self.optimizer.zero_grad(set_to_none=True)
         progress = tqdm(self.train_loader, desc=f"epoch {epoch + 1}/{self.config['epochs']}", leave=False)
@@ -357,7 +396,24 @@ class BExperimentTrainer:
             loss_batch = _move_loss_batch(batch, self.device)
             with torch.cuda.amp.autocast(enabled=self.amp_enabled):
                 predictions = self.model(loss_batch["img"])
-                loss, loss_items = self.criterion(predictions, loss_batch)
+                dra_loss = loss_batch["img"].new_zeros(())
+                if isinstance(predictions, dict):
+                    det_predictions = predictions["det_preds"]
+                    dra_prediction = predictions["dra_pred"]
+                    supervision = build_dra_supervision(
+                        loss_batch["img"],
+                        {**batch, "bboxes": loss_batch["bboxes"], "batch_idx": loss_batch["batch_idx"]},
+                        output_size=tuple(dra_prediction.shape[-2:]),
+                        mode=str(getattr(self.model, "dra_mode")),
+                        bbox_expansion=float(self.config["dra_bbox_expansion"]),
+                        edge_fusion=str(self.config["dra_edge_fusion"]),
+                        edge_alpha=float(self.config["dra_edge_alpha"]),
+                    )
+                    dra_loss = masked_l1_loss(dra_prediction, supervision.target, supervision.loss_mask)
+                else:
+                    det_predictions = predictions
+                loss, loss_items = self.criterion(det_predictions, loss_batch)
+                loss = loss + float(self.config.get("dra_lambda", 0.0)) * dra_loss * loss_batch["img"].shape[0]
                 scaled_loss = loss / self.accumulate
             self.scaler.scale(scaled_loss).backward()
             should_step = (step + 1) % self.accumulate == 0 or step + 1 == len(self.train_loader)
@@ -367,15 +423,22 @@ class BExperimentTrainer:
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
                 self.optimizer.zero_grad(set_to_none=True)
-            sums += loss_items.detach().cpu().double()
+            sums[:3] += loss_items.detach().cpu().double()
+            sums[3] += float(dra_loss.detach())
             batches += 1
             means = sums / batches
-            progress.set_postfix(box=f"{means[0]:.3f}", cls=f"{means[1]:.3f}", dfl=f"{means[2]:.3f}")
+            progress.set_postfix(
+                box=f"{means[0]:.3f}", cls=f"{means[1]:.3f}",
+                dfl=f"{means[2]:.3f}", dra=f"{means[3]:.3f}"
+            )
         peak = (
             torch.cuda.max_memory_allocated(self.device) / (1024**3) if self.device.type == "cuda" else 0.0
         )
         means = sums / max(batches, 1)
-        return {"box": float(means[0]), "cls": float(means[1]), "dfl": float(means[2])}, peak
+        return {
+            "box": float(means[0]), "cls": float(means[1]), "dfl": float(means[2]),
+            "dra": float(means[3]),
+        }, peak
 
     def _append_result(
         self,
@@ -390,6 +453,7 @@ class BExperimentTrainer:
             "train_box_loss": losses["box"],
             "train_cls_loss": losses["cls"],
             "train_dfl_loss": losses["dfl"],
+            "train_dra_loss": losses["dra"],
             "precision": metrics["precision"],
             "recall": metrics["recall"],
             "mAP50": metrics["mAP50"],
@@ -499,7 +563,24 @@ def dry_run_b_pipeline(config: dict[str, Any]) -> dict[str, Any]:
     with torch.cuda.amp.autocast(enabled=bool(dry.get("amp", True)) and device.type == "cuda"):
         output = model(loss_batch["img"])
         criterion = v8DetectionLoss(model)
-        loss, items = criterion(output, loss_batch)
+        dra_loss = loss_batch["img"].new_zeros(())
+        if isinstance(output, dict):
+            det_output = output["det_preds"]
+            dra_prediction = output["dra_pred"]
+            supervision = build_dra_supervision(
+                loss_batch["img"],
+                {**batch, "bboxes": loss_batch["bboxes"], "batch_idx": loss_batch["batch_idx"]},
+                output_size=tuple(dra_prediction.shape[-2:]),
+                mode=str(getattr(model, "dra_mode")),
+                bbox_expansion=float(dry["dra_bbox_expansion"]),
+                edge_fusion=str(dry["dra_edge_fusion"]),
+                edge_alpha=float(dry["dra_edge_alpha"]),
+            )
+            dra_loss = masked_l1_loss(dra_prediction, supervision.target, supervision.loss_mask)
+        else:
+            det_output = output
+        loss, items = criterion(det_output, loss_batch)
+        loss = loss + float(dry.get("dra_lambda", 0.0)) * dra_loss * loss_batch["img"].shape[0]
     loss.backward()
     if not torch.isfinite(loss):
         raise RuntimeError("dry-run loss is not finite")
@@ -511,9 +592,10 @@ def dry_run_b_pipeline(config: dict[str, Any]) -> dict[str, Any]:
         "variant": dry["variant"],
         "device": str(device),
         "input_shape": list(loss_batch["img"].shape),
-        "feature_levels": len(output),
-        "feature_shapes": [list(tensor.shape) for tensor in output],
+        "feature_levels": len(det_output),
+        "feature_shapes": [list(tensor.shape) for tensor in det_output],
         "loss": float(loss.detach()),
+        "dra_loss": float(dra_loss.detach()),
         "loss_items": [float(value) for value in items.detach()],
         "backward": "passed",
         "gpu_peak_memory_gib": (

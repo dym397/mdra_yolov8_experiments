@@ -10,14 +10,15 @@ import torch
 from _bootstrap import PROJECT_ROOT
 from mdra.engine.b_trainer import resolve_device
 from mdra.experiments.baselines import load_b_experiment_config
-from mdra.models.baselines import build_b_model
+from mdra.models.baselines import build_b_model, load_b_checkpoint_model
 from mdra.utils.io_utils import save_json
 from mdra.utils.path_utils import unique_experiment_dir
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Profile Params/GFLOPs/latency/FPS for a B1-B5 model.")
-    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--config", type=Path, default=None)
+    parser.add_argument("--checkpoint", type=Path, default=None)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--device", type=str, default="cpu")
@@ -29,10 +30,17 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    config = load_b_experiment_config(args.config)
-    model, report = build_b_model(
-        config["variant"], nc=config["nc"], class_names=config["class_names"], pretrained=None
-    )
+    if (args.config is None) == (args.checkpoint is None):
+        raise ValueError("provide exactly one of --config or --checkpoint")
+    if args.checkpoint:
+        model, checkpoint = load_b_checkpoint_model(args.checkpoint)
+        config = dict(checkpoint["config"])
+        report = {"parameters": sum(parameter.numel() for parameter in model.parameters())}
+    else:
+        config = load_b_experiment_config(args.config)
+        model, report = build_b_model(
+            config["variant"], nc=config["nc"], class_names=config["class_names"], pretrained=None
+        )
     channels = 3 if config["variant"] in {"visible", "infrared"} else 4
     if args.batch <= 0 or args.warmup < 0 or args.iterations <= 0:
         raise ValueError("batch and iterations must be positive; warmup must be non-negative")
@@ -76,13 +84,16 @@ def main() -> int:
         "latency_ms_per_image": latency_ms,
         "FPS": images / elapsed,
         "profiling_error": error,
+        "checkpoint": str(args.checkpoint.expanduser().resolve()) if args.checkpoint else None,
+        "dra_head_present": getattr(model, "dra_head", None) is not None,
         "note": (
             "FLOPs count uses two operations per MAC when thop is available. "
             "FPS is end-to-end model forward throughput for the requested batch and device; "
             "report batch=1 for the paper latency table."
         ),
     }
-    target_dir = unique_experiment_dir(args.output_root / "b_profiles", config["experiment_id"])
+    profile_id = str(config["experiment_id"]) + ("_stripped" if args.checkpoint else "")
+    target_dir = unique_experiment_dir(args.output_root / "b_profiles", profile_id)
     target = target_dir / "profile.json"
     save_json(output, target)
     print(output)

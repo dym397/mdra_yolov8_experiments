@@ -12,9 +12,19 @@ from ultralytics.nn.modules import C2f, Conv, Detect, SPPF
 from ultralytics.nn.tasks import DetectionModel
 
 from mdra.models.lcmf import LightweightCrossModalFusion
+from mdra.models.dra import DetailReconstructionHead
 
 
-B_MODEL_VARIANTS = ("visible", "infrared", "early_fusion", "early_fusion_p2", "lcmf", "lcmf_p2")
+B_MODEL_VARIANTS = (
+    "visible",
+    "infrared",
+    "early_fusion",
+    "early_fusion_p2",
+    "lcmf",
+    "lcmf_p2",
+    "early_fusion_p2_full_edge_dra",
+    "early_fusion_p2_target_aware_dra",
+)
 DEFAULT_CLASS_NAMES = ["People", "Car", "Bus", "Motorcycle", "Lamp", "Truck"]
 
 
@@ -137,12 +147,23 @@ class FourScaleP2Neck(nn.Module):
 class EarlyFusionP2Detector(nn.Module):
     """Four-channel early-fusion backbone with a P2/P3/P4/P5 detection neck."""
 
-    def __init__(self, nc: int, *, class_names: list[str]) -> None:
+    def __init__(
+        self,
+        nc: int,
+        *,
+        class_names: list[str],
+        dra_mode: str | None = None,
+        dra_hidden_channels: int = 32,
+    ) -> None:
         super().__init__()
-        self.variant = "early_fusion_p2"
+        self.variant = "early_fusion_p2" if dra_mode is None else f"early_fusion_p2_{dra_mode}_dra"
+        self.dra_mode = dra_mode
         self.backbone = YOLOv8sBackbone(4)
         self.neck = FourScaleP2Neck()
         self.detect = _make_legacy_detect(nc, (64, 128, 256, 512), (4, 8, 16, 32))
+        self.dra_head = (
+            DetailReconstructionHead(64, dra_hidden_channels) if dra_mode is not None else None
+        )
         self.model = [self.detect]
         self.stride = self.detect.stride
         self.names = {index: name for index, name in enumerate(class_names)}
@@ -162,7 +183,19 @@ class EarlyFusionP2Detector(nn.Module):
         if x.ndim != 4 or x.shape[1] != 4:
             raise ValueError(f"early_fusion_p2 expects BCHW input with 4 channels, got {tuple(x.shape)}")
         features = self.backbone(x)
-        return self.detect(list(self.neck(*features)))
+        pyramid = self.neck(*features)
+        detection = self.detect(list(pyramid))
+        if self.training and self.dra_head is not None:
+            return {"det_preds": detection, "dra_pred": self.dra_head(pyramid[0])}
+        return detection
+
+    def forward_dra_diagnostic(self, x: torch.Tensor) -> tuple[Any, torch.Tensor]:
+        """Explicit opt-in DRA output for validation diagnostics; detection metrics never call this."""
+        if self.dra_head is None:
+            raise RuntimeError("this model has no DRA head")
+        features = self.backbone(x)
+        pyramid = self.neck(*features)
+        return self.detect(list(pyramid)), self.dra_head(pyramid[0])
 
 
 class DualStreamLCMFDetector(nn.Module):
@@ -357,8 +390,22 @@ def build_b_model(
         model.variant = variant
         model.args = _loss_args(loss_gains)
         model.names = {index: name for index, name in enumerate(names)}
-    elif variant == "early_fusion_p2":
-        model = EarlyFusionP2Detector(nc, class_names=names)
+    elif variant in {
+        "early_fusion_p2",
+        "early_fusion_p2_full_edge_dra",
+        "early_fusion_p2_target_aware_dra",
+    }:
+        dra_mode = None
+        if variant == "early_fusion_p2_full_edge_dra":
+            dra_mode = "full_edge"
+        elif variant == "early_fusion_p2_target_aware_dra":
+            dra_mode = "target_aware"
+        model = EarlyFusionP2Detector(
+            nc,
+            class_names=names,
+            dra_mode=dra_mode,
+            dra_hidden_channels=int((loss_gains or {}).get("dra_hidden_channels", 32)),
+        )
         model.args = _loss_args(loss_gains)
     else:
         model = DualStreamLCMFDetector(nc, with_p2=variant == "lcmf_p2", class_names=names)
@@ -374,7 +421,11 @@ def build_b_model(
         source = _checkpoint_model(pretrained)
         if variant in {"visible", "infrared", "early_fusion"}:
             report.update(_initialize_stock(model, source, 4 if variant == "early_fusion" else 3))
-        elif variant == "early_fusion_p2":
+        elif variant in {
+            "early_fusion_p2",
+            "early_fusion_p2_full_edge_dra",
+            "early_fusion_p2_target_aware_dra",
+        }:
             report.update(_initialize_early_fusion_p2(model, source))
         else:
             report.update(_initialize_dual(model, source))
