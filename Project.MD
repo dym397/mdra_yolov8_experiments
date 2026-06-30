@@ -17,19 +17,19 @@
 
 ## 2. 已冻结的方法决策
 
-| 项目         | 当前决定                                                           |
-| ------------ | ------------------------------------------------------------------ |
-| 基础模型     | YOLOv8s                                                            |
-| 主数据集     | M3FD                                                               |
-| 融合模块     | LCMF                                                               |
-| 检测尺度     | P2/P3/P4/P5                                                        |
-| DRA 监督位置 | 只做 P2 单尺度                                                     |
-| DRA 目标     | bbox 邻域内的 VIS–IR 多模态边缘图                                 |
-| 主边缘融合   | `max(Edge_vis, Edge_ir)`                                         |
-| 主 mask 候选 | bbox 扩张 1.2 倍                                                   |
+| 项目         | 当前决定                                                                                           |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| 基础模型     | YOLOv8s                                                                                            |
+| 主数据集     | M3FD                                                                                               |
+| 融合模块     | LCMF                                                                                               |
+| 检测尺度     | P2/P3/P4/P5                                                                                        |
+| DRA 监督位置 | 只做 P2 单尺度                                                                                     |
+| DRA 目标     | bbox 邻域内的 VIS–IR 多模态边缘图                                                                 |
+| 主边缘融合   | `max(Edge_vis, Edge_ir)`                                                                         |
+| 主 mask 候选 | bbox 扩张 1.2 倍                                                                                   |
 | DRA 属性     | training-only；validation 可选运行 DRA 诊断，但检测指标只由检测路径计算；预测和导出不保留 DRA head |
-| MESA 定位    | 不作为独立大创新；称为 scale-aligned target-aware edge supervision |
-| ECA          | 第一版不加入；仅作为可选消融                                       |
+| MESA 定位    | 不作为独立大创新；称为 scale-aligned target-aware edge supervision                                 |
+| ECA          | 第一版不加入；仅作为可选消融                                                                       |
 
 ### 2.1 Validation 中的 DRA 使用边界
 
@@ -55,11 +55,11 @@ masked L1 loss
 
 所有 P2-DRA 都必须进行尺寸对齐。所谓 ScaleAligned 实验实际比较：
 
-| ID  | 对齐方法                 | 用途                 |
-| --- | ------------------------ | -------------------- |
-| ALIGN-BILINEAR | bilinear resize          | 朴素基线 |
-| ALIGN-AREA | area interpolation       | D2 默认；保留区域平均边缘响应 |
-| ALIGN-POOL | adaptive average pooling | 直接匹配 P2 输出尺寸 |
+| ID             | 对齐方法                 | 用途                          |
+| -------------- | ------------------------ | ----------------------------- |
+| ALIGN-BILINEAR | bilinear resize          | 朴素基线                      |
+| ALIGN-AREA     | area interpolation       | D2 默认；保留区域平均边缘响应 |
+| ALIGN-POOL     | adaptive average pooling | 直接匹配 P2 输出尺寸          |
 
 执行原则：
 
@@ -120,47 +120,48 @@ mdra_yolov8_experiments/
 
 ### 6.1 环境与数据核验
 
-| ID       | 任务                        | 状态   | 完成标准                       | 结果/备注 |
-| -------- | --------------------------- | ------ | ------------------------------ | --------- |
-| P0-ENV   | Linux/CUDA/PyTorch 环境检查 | 已完成 | 保存环境报告，GPU 可见 | RTX 3090；PyTorch 2.0.0+cu118；Ultralytics 8.3.27；报告：`outputs/env_reports/env_report_20260629_105222.*` |
-| P0-DATA  | VIS/IR/label 一一对应检查 | 已完成 | 无未解释的缺失配对 | VIS/IR/label 各 4200，34,407 个目标，0 个无效样本；报告：`outputs/data_checks/` |
-| P0-FIXED-SPLIT | 建立 fixed train/val/test 列表 | 已完成 | 保存 fixed split 文件、随机种子和样本清单 | seed 42，7:2:1，2940/840/420；`configs/splits/m3fd_seed42/` |
-| P0-STATS | 类别、bbox 面积、场景统计 | 已完成 | 输出统计表和分布图 | 34,407 个目标；CSV/JSON/PNG：`outputs/dataset_stats/`；未提供场景元数据，统一记为 unknown |
-| P0-TINY-SMOKE | tiny subset smoke test | 已完成 | 少量配对样本、1–2 epoch；验证 forward/backward、loss、配对、保存和单批预测 | 32/16、2 epoch；validation/checkpoint/results.csv/predict 均通过；`outputs/experiments/B1_visible_tiny_smoke_20260629_115152/` |
-| P0-SMALL-TRAIN | small train smoke test | 已完成 | 固定小训练子集、5–10 epoch；验证 train/validation、checkpoint、resume 和指标链路 | 300/100；epoch 2 受控中断并 resume 至 epoch 10；独立验证 mAP50=0.523、mAP50:95=0.335；`outputs/experiments/B1_visible_small_train_resume_smoke_20260629_115651/` |
+| ID             | 任务                           | 状态   | 完成标准                                                                          | 结果/备注                                                                                                                                                          |
+| -------------- | ------------------------------ | ------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P0-ENV         | Linux/CUDA/PyTorch 环境检查    | 已完成 | 保存环境报告，GPU 可见                                                            | RTX 3090；PyTorch 2.0.0+cu118；Ultralytics 8.3.27；报告：`outputs/env_reports/env_report_20260629_105222.*`                                                      |
+| P0-DATA        | VIS/IR/label 一一对应检查      | 已完成 | 无未解释的缺失配对                                                                | VIS/IR/label 各 4200，34,407 个目标，0 个无效样本；报告：`outputs/data_checks/`                                                                                  |
+| P0-FIXED-SPLIT | 建立 fixed train/val/test 列表 | 已完成 | 保存 fixed split 文件、随机种子和样本清单                                         | seed 42，7:2:1，2940/840/420；`configs/splits/m3fd_seed42/`                                                                                                      |
+| P0-STATS       | 类别、bbox 面积、场景统计      | 已完成 | 输出统计表和分布图                                                                | 34,407 个目标；CSV/JSON/PNG：`outputs/dataset_stats/`；未提供场景元数据，统一记为 unknown                                                                        |
+| P0-TINY-SMOKE  | tiny subset smoke test         | 已完成 | 少量配对样本、1–2 epoch；验证 forward/backward、loss、配对、保存和单批预测       | 32/16、2 epoch；validation/checkpoint/results.csv/predict 均通过；`outputs/experiments/B1_visible_tiny_smoke_20260629_115152/`                                   |
+| P0-SMALL-TRAIN | small train smoke test         | 已完成 | 固定小训练子集、5–10 epoch；验证 train/validation、checkpoint、resume 和指标链路 | 300/100；epoch 2 受控中断并 resume 至 epoch 10；独立验证 mAP50=0.523、mAP50:95=0.335；`outputs/experiments/B1_visible_small_train_resume_smoke_20260629_115651/` |
 
 Split 命名规则：本项目统一使用 `fixed split` 或 `unified split`。除非能够核验数据集维护者发布的正式索引文件，否则文档、代码和论文中不得称为 `official split`。
 
 ### 6.2 基础模型
 
-| ID      | 实验                | 状态   | 主要目的         | 结果路径 |
-| ------- | ------------------- | ------ | ---------------- | -------- |
-| B1      | YOLOv8s-Visible     | 未开始 | 验证基础检测管线 | —       |
-| B2      | YOLOv8s-IR          | 未开始 | 验证 IR 单模态   | —       |
-| B3      | YOLOv8s-EarlyFusion | 未开始 | 简单双模态基线   | —       |
-| B4      | YOLOv8s-LCMF        | 未开始 | 验证特征级融合   | —       |
-| B5 / D0 | YOLOv8s-LCMF-P2     | 未开始 | DRA 强推理基线   | —       |
+| ID      | 实验                | 状态   | 主要目的         | 结果路径                                                        |
+| ------- | ------------------- | ------ | ---------------- | --------------------------------------------------------------- |
+| B1      | YOLOv8s-Visible     | 已完成 | 验证基础检测管线 | epoch 94 早停；test P/R=0.8096/0.6552，mAP50/75/50:95=0.7441/0.5218/0.5034；11.14M Params，28.66 GFLOPs，195.25 FPS；`outputs/b_experiments/B1_visible/` |
+| B2      | YOLOv8s-IR          | 已完成 | 验证 IR 单模态   | epoch 100；test P/R=0.8037/0.6192，mAP50/75/50:95=0.7089/0.4926/0.4694；11.14M Params，28.66 GFLOPs，202.68 FPS；`outputs/b_experiments/B2_infrared/` |
+| B3      | YOLOv8s-EarlyFusion | 已完成 | 简单双模态基线   | epoch 95 早停；test P/R=0.8483/0.6625，mAP50/75/50:95=0.7698/0.5580/0.5246；11.14M Params，28.72 GFLOPs，199.21 FPS；`outputs/b_experiments/B3_early_fusion/` |
+| B3-P2   | YOLOv8s-EarlyFusion-P2 | 已完成 | 隔离 P2 贡献并判断是否删除 LCMF | epoch 97 早停；test P/R=0.8779/0.7102，mAP50/75/50:95=0.8097/0.5673/0.5504；10.64M Params，37.03 GFLOPs，165.65 FPS；`outputs/b_experiments/B3_early_fusion_p2/` |
+| B4      | YOLOv8s-LCMF        | 已完成 | 验证特征级融合   | epoch 100；test P/R=0.7939/0.6546，mAP50/75/50:95=0.7481/0.5488/0.5136；16.91M Params，42.39 GFLOPs，132.65 FPS；`outputs/b_experiments/B4_lcmf/` |
+| B5 / D0 | YOLOv8s-LCMF-P2     | 已完成 | DRA 强推理基线   | epoch 98 早停；test P/R=0.7962/0.7206，mAP50/75/50:95=0.7788/0.5466/0.5277；16.42M Params，51.14 GFLOPs，115.84 FPS；`outputs/b_experiments/B5_lcmf_p2/` |
 
 ### 6.3 P2 单尺度 DRA 核心实验
 
-| ID  | 实验                          | 状态   | 固定对齐      | 主要比较                   |
-| --- | ----------------------------- | ------ | ------------- | -------------------------- |
-| D0  | LCMF-P2，无 DRA               | 未开始 | —            | 基线                       |
-| D1  | LCMF-P2-FullEdgeDRA           | 未开始 | area          | D0 vs D1：边缘辅助是否有效 |
-| D2  | LCMF-P2-TargetAwareDRA        | 未开始 | area（主配置） | D1 vs D2：目标感知是否有效 |
-| D2-BI | D2 的 bilinear 对齐变体 | 未开始 | bilinear | 与 D2 比较对齐方式 |
-| D2-POOL | D2 的 adaptive-pooling 对齐变体 | 未开始 | adaptive pool | 与 D2 比较对齐方式 |
+| ID      | 实验                            | 状态   | 固定对齐       | 主要比较                   |
+| ------- | ------------------------------- | ------ | -------------- | -------------------------- |
+| D0      | EarlyFusion-P2，无 DRA          | 已完成 | —             | 根据受控实验冻结为新的 D0；`outputs/b_experiments/B3_early_fusion_p2/` |
+| D1      | LCMF-P2-FullEdgeDRA             | 未开始 | area           | D0 vs D1：边缘辅助是否有效 |
+| D2      | LCMF-P2-TargetAwareDRA          | 未开始 | area（主配置） | D1 vs D2：目标感知是否有效 |
+| D2-BI   | D2 的 bilinear 对齐变体         | 未开始 | bilinear       | 与 D2 比较对齐方式         |
+| D2-POOL | D2 的 adaptive-pooling 对齐变体 | 未开始 | adaptive pool  | 与 D2 比较对齐方式         |
 
 注意：D2 已定义为 area 对齐主配置，不再设置单独的 area 对齐变体。`D2-BI` 和 `D2-POOL` 只改变训练监督图构造，不增加推理模块。
 
 ### 6.4 辅助任务公平对照
 
-| ID | 实验                        | 状态   | 目的                       |
-| -- | --------------------------- | ------ | -------------------------- |
+| ID | 实验                        | 状态   | 目的                                                |
+| -- | --------------------------- | ------ | --------------------------------------------------- |
 | A1 | LCMF-P2-SRStyleAux          | 未开始 | SR-style auxiliary 受控对照；排除全局 SR 正则化解释 |
-| A2 | LCMF-P2-ImageReconstruction | 未开始 | 排除普通图像重建解释       |
-| A3 | LCMF-P2-SegAux              | 未开始 | 排除 bbox 密集辅助监督解释 |
-| A4 | LCMF-P2-TargetAwareDRA      | 未开始 | 本文方法                   |
+| A2 | LCMF-P2-ImageReconstruction | 未开始 | 排除普通图像重建解释                                |
+| A3 | LCMF-P2-SegAux              | 未开始 | 排除 bbox 密集辅助监督解释                          |
+| A4 | LCMF-P2-TargetAwareDRA      | 未开始 | 本文方法                                            |
 
 会议最小版本至少完成 A1 vs A4；有算力时优先补 A3。
 
@@ -266,26 +267,36 @@ conclusion
 
 ## 9. 当前进度
 
-| 日期       | 进度                                        | 状态   |
-| ---------- | ------------------------------------------- | ------ |
-| 2026-06-28 | 完成 23 篇文献分析报告                      | 已完成 |
-| 2026-06-28 | 完成修订实验计划                            | 已完成 |
-| 2026-06-28 | 确定先做 P2 单尺度 DRA                      | 已完成 |
-| 2026-06-28 | 建立 Linux 兼容实验项目目录与`Project.MD` | 已完成 |
-| 2026-06-28 | 完成 6.1 代码骨架、README、配置与基础测试 | 已完成 |
-| 2026-06-28 | 12 项单元/合成数据集成测试 | 已完成 |
-| 2026-06-28 | Linux GPU 环境报告、CUDA 运算和 YOLOv8s 构建核验 | 已完成 |
-| 2026-06-28 | 远端 12 项测试通过；修复 Python 3.8 的 `--amp/--no-amp` 兼容性 | 已完成 |
-| 2026-06-28 | 项目、数据集目录和项目内输出迁移到持久化数据盘 `/root/autodl-tmp` | 已完成 |
-| 2026-06-29 | 完整 M3FD 配对检查：4200 对、34,407 个目标、0 个无效样本 | 已完成 |
-| 2026-06-29 | 建立 seed 42 fixed/unified split：2940/840/420，并完成真实数据统计 | 已完成 |
-| 2026-06-29 | tiny-subset GPU smoke：2 epoch、validation、checkpoint 和 predict | 已完成 |
-| 2026-06-29 | small-train GPU smoke：epoch 2 中断后 resume 至 epoch 10，并独立验证和预测 | 已完成 |
-| —         | YOLOv8s-Visible 正式基线 | 下一步 |
+| 日期       | 进度                                                                                                                                                                    | 状态   |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 2026-06-28 | 完成 23 篇文献分析报告                                                                                                                                                  | 已完成 |
+| 2026-06-28 | 完成修订实验计划                                                                                                                                                        | 已完成 |
+| 2026-06-28 | 确定先做 P2 单尺度 DRA                                                                                                                                                  | 已完成 |
+| 2026-06-28 | 建立 Linux 兼容实验项目目录与`Project.MD`                                                                                                                             | 已完成 |
+| 2026-06-28 | 完成 6.1 代码骨架、README、配置与基础测试                                                                                                                               | 已完成 |
+| 2026-06-28 | 12 项单元/合成数据集成测试                                                                                                                                              | 已完成 |
+| 2026-06-28 | Linux GPU 环境报告、CUDA 运算和 YOLOv8s 构建核验                                                                                                                        | 已完成 |
+| 2026-06-28 | 远端 12 项测试通过；修复 Python 3.8 的`--amp/--no-amp` 兼容性                                                                                                         | 已完成 |
+| 2026-06-28 | 项目、数据集目录和项目内输出迁移到持久化数据盘`/root/autodl-tmp`                                                                                                      | 已完成 |
+| 2026-06-29 | 完整 M3FD 配对检查：4200 对、34,407 个目标、0 个无效样本                                                                                                                | 已完成 |
+| 2026-06-29 | 建立 seed 42 fixed/unified split：2940/840/420，并完成真实数据统计                                                                                                      | 已完成 |
+| 2026-06-29 | tiny-subset GPU smoke：2 epoch、validation、checkpoint 和 predict                                                                                                       | 已完成 |
+| 2026-06-29 | small-train GPU smoke：epoch 2 中断后 resume 至 epoch 10，并独立验证和预测                                                                                              | 已完成 |
+| 2026-06-29 | 对照《拟定实验计划.md》完成 6.2 的 B1–B5 代码、配置及统一 train/val/predict/profile 入口；补齐 mAP75、per-class AP、PR 曲线、混淆矩阵、预测图和 Params/GFLOPs/FPS 输出 | 已完成 |
+| 2026-06-29 | 无卡模式完成语法及数据/配置/路径 20 项测试；按用户要求停止耗时的 CPU 模型前向检查，未启动任何 B 实验训练                                                                | 已完成 |
+| 2026-06-29 | RTX 3090 下完成 B1–B5 单批 GPU preflight；五个模型的真实数据 forward、loss 和 backward 全部通过                                                                        | 已完成 |
+| 2026-06-29 | 启动 B1–B5 顺序控制器；B1 第 1 epoch 用时 44.85 秒，峰值显存 3.24 GiB，训练链路正常                                                                                       | 运行中 |
+| 2026-06-29 | B1 在 epoch 94 早停并完成 fixed-test、predict、profile；test mAP50=0.7441、mAP75=0.5218、mAP50:95=0.5034，195.25 FPS；控制器进入 B2 | 已完成 |
+| 2026-06-29 | B2 跑满 epoch 100 并完成 fixed-test、predict、profile；test mAP50=0.7089、mAP75=0.4926、mAP50:95=0.4694，202.68 FPS；控制器进入 B3 | 已完成 |
+| 2026-06-30 | B3/B4/B5 全部完成 train、fixed-test、predict、profile；B5 test mAP50=0.7788、Recall=0.7206、mAP50:95=0.5277；6.2 B 组全流程完成 | 已完成 |
+| 2026-06-30 | 根据 B4 未超过 B3 的结果，完成 B3-P2（EarlyFusion-P2）代码与配置；无卡模式仅完成语法检查，模型测试已按用户要求终止，等待 GPU preflight | 实现中 |
+| 2026-06-30 | B3-P2 GPU preflight 通过并启动正式训练；第 1 epoch 用时 48.24 秒，峰值 PyTorch 显存 5.47 GiB，训练链路正常 | 运行中 |
+| 2026-06-30 | B3-P2 在 epoch 97 早停并完成 fixed-test、predict、profile；test mAP50=0.8097、mAP75=0.5673、mAP50:95=0.5504，165.65 FPS；确定以 EarlyFusion-P2 替代 LCMF-P2 作为 D0 | 已完成 |
+| —         | 基于 EarlyFusion-P2 D0 进入 6.3 DRA 核心实验代码实现；LCMF 仅保留为消融对照 | 下一步 |
 
 ## 10. 下一步
 
-6.1 已在真实 M3FD/Linux GPU 上全部通过，本阶段到此停止。下一步进入 B1 YOLOv8s-Visible 正式基线；仍不提前实现 LCMF、P2 或 DRA。
+6.1、原 B1–B5 及 B3-P2 受控实验已全部完成。EarlyFusion-P2 相比 B3 EarlyFusion 的 test mAP50:95 提升 0.0258，相比 B5 LCMF-P2 提升 0.0227；同时比 B5 减少约 35.2% Params、27.6% GFLOPs，并将 FPS 从 115.84 提升至 165.65。最终推理骨架冻结为 EarlyFusion-P2，LCMF 从最终方法中删除，仅保留为负结果/消融对照。下一步基于新的 D0 实现 6.3 DRA；DRA、MESA、SR-style auxiliary、SegAux 和 ECA 尚未实现。
 
 正式基线前保持以下内容冻结：
 

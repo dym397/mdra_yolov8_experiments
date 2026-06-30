@@ -247,14 +247,125 @@ python scripts/train_visible.py \
 
 The resume request and environment are saved under `$OUTPUT_ROOT/resume_logs/`.
 
-## 6. Output safety
+## 6. 6.2 B1–B5 baseline code
+
+The 6.2 code uses one paired-data/training/evaluation protocol for all variants:
+
+| Config | Variant | Input / detection scales |
+| --- | --- | --- |
+| `B1_visible.yaml` | Visible | RGB, P3/P4/P5 |
+| `B2_infrared.yaml` | Infrared | grayscale repeated to 3 channels, P3/P4/P5 |
+| `B3_early_fusion.yaml` | EarlyFusion | RGB+IR 4-channel input, P3/P4/P5 |
+| `B3_early_fusion_p2.yaml` | EarlyFusion-P2 | RGB+IR 4-channel input, P2/P3/P4/P5 |
+| `B4_lcmf.yaml` | LCMF | dual stream; `Concat -> 1x1 Conv -> BN -> SiLU`, P3/P4/P5 |
+| `B5_lcmf_p2.yaml` | LCMF-P2 | same LCMF with P2/P3/P4/P5 detection |
+
+LCMF and P2 are framework/auxiliary baselines, not the paper's core contribution. No DRA, MESA, SR-style auxiliary, SegAux, or ECA is included in these configs.
+
+### 6.1 GPU preflight after switching to GPU mode
+
+Do not run formal training before all five commands pass. Each command reads two real paired samples and performs one forward, detection loss, and backward pass; it does not run an epoch or update weights.
+
+```bash
+for CONFIG in \
+  configs/experiments/B1_visible.yaml \
+  configs/experiments/B2_infrared.yaml \
+  configs/experiments/B3_early_fusion.yaml \
+  configs/experiments/B4_lcmf.yaml \
+  configs/experiments/B5_lcmf_p2.yaml
+do
+  python scripts/train_b_baseline.py \
+    --config "$CONFIG" \
+    --data-root "$DATA_ROOT" \
+    --vis-dir Vis \
+    --ir-dir Ir \
+    --label-dir labels \
+    --split-dir configs/splits/m3fd_seed42 \
+    --output-root "$OUTPUT_ROOT" \
+    --device 0 \
+    --dry-run || exit 1
+done
+```
+
+Reports are saved under `$OUTPUT_ROOT/b_dry_runs/`.
+
+For an unattended sequential run with compact monitoring, use the controller after all five preflights pass:
+
+```bash
+nohup bash scripts/run_b_suite.sh \
+  --data-root "$DATA_ROOT" \
+  --output-root "$OUTPUT_ROOT" \
+  --split-dir configs/splits/m3fd_seed42 \
+  --device 0 \
+  --skip-preflight \
+  > "$OUTPUT_ROOT/b_suite_launcher.log" 2>&1 &
+```
+
+The controller runs B1 through B5 sequentially and stops on the first failure. After each training run it performs fixed-test evaluation, saves 20 prediction visualizations, and profiles Params/GFLOPs/latency/FPS. Monitoring only needs the compact files below; full logs remain on the server:
+
+```bash
+CONTROLLER_DIR="$(cat "$OUTPUT_ROOT/b_suite_controller/latest.txt")"
+cat "$CONTROLLER_DIR/status.txt"
+tail -n 5 "$CONTROLLER_DIR/history.tsv"
+```
+
+### 6.2 Formal training order
+
+Run B1 through B5 sequentially so errors and memory usage are known before the larger dual-stream models. The YAML files freeze the common seed, fixed split, image size, optimizer, schedule, and evaluation thresholds. B4/B5 use batch 8 with effective batch 16; B1–B3 use batch 16.
+
+```bash
+python scripts/train_b_baseline.py \
+  --config configs/experiments/B1_visible.yaml \
+  --data-root "$DATA_ROOT" --vis-dir Vis --ir-dir Ir --label-dir labels \
+  --split-dir configs/splits/m3fd_seed42 --output-root "$OUTPUT_ROOT" --device 0
+```
+
+Replace the config in order with `B2_infrared.yaml`, `B3_early_fusion.yaml`, `B4_lcmf.yaml`, and `B5_lcmf_p2.yaml`. If B4/B5 runs out of memory, reduce `--batch` while keeping `--effective-batch 16`; record the actual batch in the result table.
+
+### 6.3 Validation, prediction, and complexity
+
+```bash
+python scripts/validate_b_baseline.py \
+  --checkpoint /path/to/run/weights/best.pt \
+  --output-root "$OUTPUT_ROOT" --device 0
+
+python scripts/predict_b_baseline.py \
+  --checkpoint /path/to/run/weights/best.pt \
+  --data-root "$DATA_ROOT" \
+  --split-dir configs/splits/m3fd_seed42 \
+  --split test --max-images 20 \
+  --output-root "$OUTPUT_ROOT" --device 0
+
+python scripts/profile_b_baseline.py \
+  --config configs/experiments/B1_visible.yaml \
+  --output-root "$OUTPUT_ROOT" \
+  --imgsz 640 --device 0 --batch 1 --warmup 20 --iterations 100
+```
+
+Validation saves P/R, mAP50, mAP75, mAP50:95, per-class AP, PR curves, normalized/raw confusion matrices, JSON, and CSV. Profiling must use the same GPU, image size, batch 1, warmup, and iteration count for B1–B5.
+
+### 6.4 EarlyFusion-P2 decision experiment
+
+`B3_early_fusion_p2.yaml` is a controlled follow-up, not a new core contribution. It isolates the P2 gain from LCMF. After switching to GPU mode, run a single-batch preflight first:
+
+```bash
+python scripts/train_b_baseline.py \
+  --config configs/experiments/B3_early_fusion_p2.yaml \
+  --data-root "$DATA_ROOT" --vis-dir Vis --ir-dir Ir --label-dir labels \
+  --split-dir configs/splits/m3fd_seed42 --output-root "$OUTPUT_ROOT" \
+  --device 0 --dry-run
+```
+
+Only after it passes should the same command be run without `--dry-run`. Compare B3, B3-P2, B4, and B5 under the same fixed split and protocol. If B3-P2 matches or exceeds B5 at materially lower inference cost, use EarlyFusion-P2 as the DRA baseline and remove LCMF from the final method.
+
+## 7. Output safety
 
 - Pair checks, statistics, and split generation refuse to overwrite files unless `--overwrite` is passed.
 - Training always creates a unique run directory.
 - Original M3FD images and labels are read-only inputs.
 - Split files store sample IDs, not machine-specific absolute paths.
 
-## 7. Current scope
+## 8. Current scope
 
 Implemented:
 
@@ -264,17 +375,18 @@ Implemented:
 - P0-STATS;
 - P0-TINY-SMOKE;
 - P0-SMALL-TRAIN;
-- YOLOv8s-Visible wrapper.
+- YOLOv8s-Visible 6.1 wrapper;
+- paired B1–B5 baseline data loader;
+- Visible, Infrared, EarlyFusion, LCMF, and LCMF-P2 model definitions;
+- unified B1–B5 train/resume/validation/prediction/profile entry points.
 
 Not implemented in this phase:
 
-- IR training;
-- EarlyFusion;
-- LCMF;
-- P2;
 - DRA or validation-time DRA diagnostics;
 - SR-style auxiliary;
 - SegAux;
 - ECA;
 - SOTA comparisons;
 - second datasets.
+
+The B1–B5 code is prepared but has not yet completed GPU preflight or formal training in the current no-GPU instance.

@@ -10,4 +10,5 @@ PyYAML
 tqdm
 scikit-learn
 pytest
-
+seaborn
+thop
